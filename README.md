@@ -41,16 +41,66 @@ cd nigeria-tax-impact-model
 pip install -r requirements.txt
 ```
 
-### 2. Execution
+### 2. Basic Execution
 Run the full pipeline with a single command:
 ```bash
-python tax_model.py --simulations 10000
+python tax_model.py --simulations 1000
 ```
 
-### 3. Dynamic Policy Overrides (CLI)
-Test ad-hoc policy changes without editing code:
+## 💻 Command-Line Interface (CLI) Reference
+
+The system is highly flexible. Use these flags to control the pipeline or run sensitivity analyses.
+
+### 🚩 Core Pipeline Flags
+
+| Flag | Description | Example |
+| :--- | :--- | :--- |
+| `--simulations [N]` | Set the number of Monte Carlo runs. | `python tax_model.py --simulations 50000` |
+| `--skip-fetch` | Use cached data; skip Google Data Commons/World Bank API calls. | `python tax_model.py --skip-fetch` |
+| `--reports-only` | Skip training and simulation; just regenerate the HTML/PDF/Word reports. | `python tax_model.py --reports-only` |
+
+### 🛠️ Policy Override Flags (Sensitivity Analysis)
+
+These flags allow you to override factors in the **New Tax Act** and **Inflation Shock** scenarios dynamically.
+
+| Flag | Purpose | Example |
+| :--- | :--- | :--- |
+| `--sme-tax [VAL]` | Set a custom CIT rate for SMEs (e.g., test a 5% compromise). | `python tax_model.py --sme-tax 5.0` |
+| `--vat-recovery [VAL]` | Test different digital collection efficiency levels (e.g. 80%). | `python tax_model.py --vat-recovery 80.0` |
+| `--inflation-shock [VAL]` | Set the multiplier for the extreme inflation scenario (e.g. 2.0 = 100% spike). | `python tax_model.py --inflation-shock 2.0` |
+
+---
+
+## 🧪 Advanced Usage Examples
+
+### 1. The "Deep Dive" Analysis
+Run a high-precision simulation with 50,000 iterations to get stable risk percentages:
 ```bash
-python tax_model.py --sme-tax 5.0 --vat-recovery 85.0 --inflation-shock 1.2
+python tax_model.py --simulations 50000
+```
+
+### 2. The "Quick Report" Refresh
+If you've already trained the model and just want to generate new PDF/Word files without waiting for AI training:
+```bash
+python tax_model.py --reports-only
+```
+
+### 3. Testing a "Moderate Reform"
+What if the SME tax isn't 0%, but 10%, and VAT recovery only hits 75%?
+```bash
+python tax_model.py --sme-tax 10.0 --vat-recovery 75.0 --skip-fetch
+```
+
+### 4. Extreme Stress Testing
+Test a scenario where inflation spikes by 300% (4.0x multiplier) while using the new tax law:
+```bash
+python tax_model.py --inflation-shock 4.0 --skip-fetch
+```
+
+### 5. Offline Mode
+Run the full simulation using only local files (perfect for poor connectivity):
+```bash
+python tax_model.py --skip-fetch
 ```
 
 ---
