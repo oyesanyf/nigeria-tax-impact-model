@@ -1,0 +1,13 @@
+pandas
+numpy
+matplotlib
+seaborn
+scikit-learn
+tpot
+pmdarima
+joblib
+tqdm
+datacommons-client
+openai
+python-docx
+fpdf2

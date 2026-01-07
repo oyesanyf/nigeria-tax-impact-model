@@ -1,0 +1,4 @@
+Inspecting SDMS_Bulk_Data_Download_2026_01_06_02_44_43.xlsx
+Sheet Names: ['CBN_Data']
+
+--- Sheet: CBN_Data ---

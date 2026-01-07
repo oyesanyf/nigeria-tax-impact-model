@@ -1,0 +1,42 @@
+{
+    "simulation": {
+        "n_simulations": 1000,
+        "forecast_horizon_quarters": 4,
+        "oil_price_uncertainty_std": 10.0
+    },
+    "scenarios": [
+        {
+            "name": "Old Law (Baseline)",
+            "description": "Historical tax policy: 25% CIT, 55% VAT Recovery",
+            "params": {
+                "SME_Tax": 25.0,
+                "VAT_Recovery": 55.0,
+                "Digital_Multiplier": 1.0,
+                "Inflation_Multiplier": 1.0
+            },
+            "color": "red"
+        },
+        {
+            "name": "New Tax Act 2025",
+            "description": "Reform: 0% SME Tax, 95% VAT Recovery via Digitalization",
+            "params": {
+                "SME_Tax": 0.0,
+                "VAT_Recovery": 95.0,
+                "Digital_Multiplier": 1.05,
+                "Inflation_Multiplier": 1.0
+            },
+            "color": "blue"
+        },
+        {
+            "name": "Inflation Shock",
+            "description": "Reform scenario but with 50% inflation spike",
+            "params": {
+                "SME_Tax": 0.0,
+                "VAT_Recovery": 95.0,
+                "Digital_Multiplier": 1.05,
+                "Inflation_Multiplier": 1.5
+            },
+            "color": "orange"
+        }
+    ]
+}
