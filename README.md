@@ -136,6 +136,27 @@ The system ingests data from **NBS**, **CBN**, **World Bank**, and **Google Data
 
 ---
 
+## 🧪 Data Integrity: Synthetic Proxies & Real-World Upgrades
+
+### Why Synthetic Proxies?
+Macroeconomic data in emerging markets often faces **frequency gaps** (annual data for quarterly models) or **granularity gaps** (total revenue known, but specific SME effective rates unknown). 
+
+To ensure the model remains functional and provides directional insights, we use **Econometric Proxies**:
+- **SME Tax Proxy:** Derived using the ratio of total CIT revenue to economic output, scaled to historical policy anchors (25%).
+- **Digitalization Proxy:** Linear interpolation of annual World Bank Internet Usage data to quarterly frequency. Surpasses missing data by assuming smooth adoption curves.
+- **Fallback Generation:** If official data is unavailable, the system uses a stochastic generation engine (GBM - Geometric Brownian Motion) based on historical volatility to maintain simulation stability.
+
+### 📈 How to Improve with Real Data
+The system is designed for a **"Plug-and-Play" upgrade**. If you obtain higher-quality actuals, you can improve model accuracy (R²) by:
+
+1.  **Replacing Proxies:** Update `nigeria_economic_data.csv` with official **FIRS Quarterly Effective Tax Rate** reports.
+2.  **Adding Micro-Level Data:** If firm-level SME tax payment data from the **Corporate Affairs Commission (CAC)** is found, it can be merged to train a more granular "Bottom-Up" model.
+3.  **High-Frequency Signals:** Replace quarterly GDP with monthly **NIBSS digital payment volumes** to capture real-time economic shifts.
+
+**To Upgrade:** Simply place your new `.csv` or `.xlsx` files in the `dataset/` folder and run `python tax_model.py`. The AutoML engine will automatically re-train and favor the new, higher-quality signals.
+
+---
+
 ## 📈 Improving Accuracy
 The model currently achieves an **R² of ~0.85**. Accuracy can be further enhanced by providing:
 - **FIRS Quarterly Returns:** Sector-specific effective tax rates.
