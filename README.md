@@ -157,6 +157,28 @@ The system is designed for a **"Plug-and-Play" upgrade**. If you obtain higher-q
 
 ---
 
+## 📚 Primary Data Sources
+
+The model integrates data from five core sources to ensure a balanced view of the Nigerian economy:
+
+1.  **🇳🇬 National Bureau of Statistics (NBS):**
+    - **Data:** GDP Growth (Real/Nominal), Sectoral Activity.
+    - **Role:** Provides the "Ground Truth" for model training and historical targets.
+2.  **🏦 Central Bank of Nigeria (CBN):**
+    - **Data:** Crude Oil Prices (Bonny Light), Foreign Exchange, and Financial Statistics.
+    - **Role:** Represents the primary economic driver and wealth engine for the simulation.
+3.  **🔍 Google Data Commons (DC):**
+    - **Data:** Historical Tax Revenue (% GDP), Consumer Price Index (CPI), and Global benchmarks.
+    - **Role:** Fills long-term historical gaps (2000-2015) for trend analysis.
+4.  **🌍 World Bank (WB):**
+    - **Data:** Digital Penetration (% Internet), Remittances, and Development Indicators.
+    - **Role:** Provides "Modern Factors" used to simulate the impact of digitalization on revenue.
+5.  **📈 Nigeria Revenue Service (NRS):**
+    - **Data:** 2025 Actual CIT and VAT collections (Q1-Q3).
+    - **Role:** Acts as the "Calibration Anchor" to ensure the 2026 forecast starts from real-world 2025 actuals.
+
+---
+
 ## 📈 Improving Accuracy
 The model currently achieves an **R² of ~0.85**. Accuracy can be further enhanced by providing:
 - **FIRS Quarterly Returns:** Sector-specific effective tax rates.

@@ -15,14 +15,42 @@ import tempfile
 from docx import Document
 from docx.shared import Inches
 from fpdf import FPDF
+from sklearn.inspection import permutation_importance
 
 # Set seaborn style
 sns.set_style("whitegrid")
 sns.set_palette("husl")
 
-def generate_charts(sim_results, df, oil_forecast, model_r2):
+def generate_sensitivity_chart(model, df):
+    """Calculate and plot feature importance using permutation importance."""
+    feature_cols = ['Oil_Price', 'SME_Tax', 'VAT_Recovery', 'Digital_Penetration', 'Remittances_USD', 'Inflation_Rate']
+    # Filter columns to only those present in df
+    feature_cols = [c for c in feature_cols if c in df.columns]
+    
+    X = df[feature_cols]
+    y = df['GDP_Growth']
+    
+    # Calculate Permutation Importance
+    r = permutation_importance(model, X, y, n_repeats=10, random_state=42)
+    
+    # Sort by importance
+    sorted_idx = r.importances_mean.argsort()
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.barh([feature_cols[i] for i in sorted_idx], r.importances_mean[sorted_idx], color='#27ae60', alpha=0.8)
+    ax.set_xlabel("Permutation Importance (R² Increase)", fontsize=12)
+    ax.set_title("Policy Influence: Which Factors Drive GDP?", fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    
+    img_str = fig_to_base64(fig)
+    plt.close(fig)
+    return img_str
+
+def generate_charts(sim_results, df, oil_forecast, model_r2, model=None):
     """Generate multiple charts and return them as base64 encoded strings."""
     charts = {}
+    
+    # Existing charts...
     
     # Chart 1: Main Distribution Plot (KDE)
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -121,6 +149,10 @@ def generate_charts(sim_results, df, oil_forecast, model_r2):
     charts['risk_bars'] = fig_to_base64(fig)
     plt.close(fig)
     
+    # Chart 7: Sensitivity Analysis (New)
+    if model is not None:
+        charts['sensitivity'] = generate_sensitivity_chart(model, df)
+    
     return charts
 
 def fig_to_base64(fig):
@@ -176,7 +208,7 @@ Use professional economic language. Be specific about the techniques used."""
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
+            temperature=0.0,
             max_tokens=800
         )
         
@@ -224,8 +256,8 @@ def generate_enhanced_report(sim_results, df, oil_forecast, model, model_r2, n_s
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Generate all charts
-    print("Generating visualizations...")
-    charts = generate_charts(sim_results, df, oil_forecast, model_r2)
+    print("Generating visualizations and sensitivity analysis...")
+    charts = generate_charts(sim_results, df, oil_forecast, model_r2, model=model)
     
     # Generate AI summary
     print("Generating executive summary...")
@@ -448,6 +480,15 @@ def generate_enhanced_report(sim_results, df, oil_forecast, model, model_r2, n_s
                 <h3>Feature Correlation Matrix</h3>
                 <img src="data:image/png;base64,{charts['correlation']}" alt="Correlation">
             </div>
+
+            <div class="chart-container">
+                <h3>Policy Influence: Factor Importance</h3>
+                <p style="font-size: 0.9em; color: #7f8c8d; max-width: 800px; margin: 0 auto 15px;">
+                    This chart uses <strong>Permutation Importance</strong> to measure which variables have the most leverage 
+                    over predicted GDP. Higher values indicate factors with greater economic impact in the model.
+                </p>
+                <img src="data:image/png;base64,{charts['sensitivity']}" alt="Sensitivity Analysis">
+            </div>
         </div>
         
         <div class="section">
@@ -457,40 +498,40 @@ def generate_enhanced_report(sim_results, df, oil_forecast, model, model_r2, n_s
                     <tr>
                         <th>Source</th>
                         <th>Data Type</th>
-                        <th>Coverage</th>
+                        <th>Role in Model</th>
                         <th>URL/Reference</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td><strong>National Bureau of Statistics (NBS)</strong></td>
-                        <td>GDP Growth (Real & Nominal), Economic Activity</td>
-                        <td>2006–2025 (Quarterly)</td>
+                        <td>GDP Growth (Real/Nominal)</td>
+                        <td>Ground Truth for training and historical targets</td>
                         <td><a href="https://nigerianstat.gov.ng/elibrary" target="_blank">NBS eLibrary</a></td>
                     </tr>
                     <tr>
                         <td><strong>Central Bank of Nigeria (CBN)</strong></td>
-                        <td>Crude Oil Prices (Bonny Light), Financial Statistics</td>
-                        <td>2006–2025 (Monthly/Quarterly)</td>
+                        <td>Crude Oil Prices (Bonny Light)</td>
+                        <td>Primary economic driver and wealth engine</td>
                         <td><a href="https://www.cbn.gov.ng/documents/statbulletin.asp" target="_blank">CBN Statistical Bulletin</a></td>
                     </tr>
                     <tr>
                         <td><strong>Nigeria Revenue Service (NRS)</strong></td>
-                        <td>2025 Tax Revenue Actuals (CIT, VAT)</td>
-                        <td>2025 Q1–Q3</td>
+                        <td>2025 Actual CIT and VAT collections</td>
+                        <td>Calibration anchor for 2026 forecasts</td>
                         <td><a href="https://nrs.gov.ng/transparency/revenue-dashboard" target="_blank">NRS Dashboard</a></td>
                     </tr>
                     <tr>
                         <td><strong>Google Data Commons</strong></td>
-                        <td>Tax Revenue (% GDP), Inflation (CPI), Remittances</td>
-                        <td>2006–2024 (Annual)</td>
+                        <td>Tax Revenue (% GDP), Inflation (CPI)</td>
+                        <td>Fills historical gaps (2000-2015)</td>
                         <td><a href="https://datacommons.org" target="_blank">Data Commons API</a></td>
                     </tr>
                     <tr>
-                        <td><strong>World Bank</strong></td>
-                        <td>Internet Usage (Digital Penetration), Development Indicators</td>
-                        <td>2006–2023 (Annual)</td>
-                        <td><a href="https://databank.worldbank.org" target="_blank">World Development Indicators</a></td>
+                        <td><strong>World Bank (WB)</strong></td>
+                        <td>Digital Penetration, Remittances</td>
+                        <td>Modern factors for digitalization impact</td>
+                        <td><a href="https://databank.worldbank.org" target="_blank">WDI Indicators</a></td>
                     </tr>
                 </tbody>
             </table>
@@ -700,7 +741,8 @@ def generate_docx_report(filename, timestamp, summary, df, model_r2, oil_forecas
         ('GDP Growth Range', 'boxplot'),
         ('Historical GDP Trend', 'historical'),
         ('Oil Price History & Forecast', 'oil'),
-        ('Feature Correlation Matrix', 'correlation')
+        ('Feature Correlation Matrix', 'correlation'),
+        ('Policy Influence (Sensitivity)', 'sensitivity')
     ]:
         doc.add_heading(title, level=2)
         # Convert base64 back to image for docx
@@ -713,6 +755,26 @@ def generate_docx_report(filename, timestamp, summary, df, model_r2, oil_forecas
     doc.add_heading('Training Methodology', level=1)
     model_str = str(model.fitted_pipeline_) if hasattr(model, 'fitted_pipeline_') else str(model)
     doc.add_paragraph(f"ML Framework: TPOT (Genetic Programming)\nModel: {model_str[:500]}")
+
+    doc.add_heading('Data Sources', level=1)
+    ds_table = doc.add_table(rows=1, cols=3)
+    hdr_cells = ds_table.rows[0].cells
+    hdr_cells[0].text = 'Source'
+    hdr_cells[1].text = 'Data Type'
+    hdr_cells[2].text = 'Role in Model'
+    
+    sources = [
+        ('NBS', 'GDP Growth (Real/Nominal)', 'Ground Truth for training'),
+        ('CBN', 'Crude Oil Prices (Bonny Light)', 'Primary economic driver'),
+        ('NRS', '2025 Actual Citizen Collections', 'Calibration anchor for forecasts'),
+        ('Data Commons', 'Tax Revenue, Inflation', 'Fills historical gaps (2000-2015)'),
+        ('World Bank', 'Digital Penetration, Remittances', 'Modern impact factors')
+    ]
+    for s, d, r in sources:
+        row_cells = ds_table.add_row().cells
+        row_cells[0].text = s
+        row_cells[1].text = d
+        row_cells[2].text = r
 
     doc.save(filename)
 
@@ -750,7 +812,8 @@ def generate_pdf_report(filename, timestamp, summary, df, model_r2, oil_forecast
         ('GDP Growth Range', 'boxplot'),
         ('Historical GDP Trend', 'historical'),
         ('Oil Price Forecast', 'oil'),
-        ('Feature Correlation', 'correlation')
+        ('Feature Correlation', 'correlation'),
+        ('Policy Influence', 'sensitivity')
     ]:
         if pdf.get_y() > 200: pdf.add_page()
         pdf.set_font("helvetica", 'B', 12)
@@ -762,6 +825,30 @@ def generate_pdf_report(filename, timestamp, summary, df, model_r2, oil_forecast
         pdf.image(tmpfile_path, x=10, w=180)
         os.unlink(tmpfile_path)
         pdf.ln(5)
+
+    # Data Sources
+    pdf.add_page()
+    pdf.set_font("helvetica", 'B', 14)
+    pdf.cell(0, 10, "Data Sources", ln=True)
+    pdf.set_font("helvetica", 'B', 10)
+    
+    # Table Header
+    pdf.cell(30, 10, "Source", 1)
+    pdf.cell(80, 10, "Data Type", 1)
+    pdf.cell(80, 10, "Role in Model", 1, ln=True)
+    
+    pdf.set_font("helvetica", size=9)
+    sources = [
+        ('NBS', 'GDP Growth', 'Ground Truth'),
+        ('CBN', 'Oil Prices', 'Economic Driver'),
+        ('NRS', '2025 Actuals', 'Calibration Anchor'),
+        ('Data Commons', 'Tax, Inflation', 'Historical Gaps'),
+        ('World Bank', 'Digital, Remit.', 'Modern Factors')
+    ]
+    for s, d, r in sources:
+        pdf.cell(30, 8, s, 1)
+        pdf.cell(80, 8, d, 1)
+        pdf.cell(80, 8, r, 1, ln=True)
 
     pdf.output(filename)
 
