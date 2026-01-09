@@ -1049,11 +1049,15 @@ def generate_multi_oil_ai_summary(scenario_results, oil_prices, model_r2, n_simu
     - **Monetary:** How to coordinate with CBN on inflation?
     - **Implementation:** Critical success factors for the Digital VAT rollout.
 
+5.  **<h3>⚠️ Model Limitations & Risks</h3>**
+    - What factors is the model NOT capturing? (e.g., civil unrest, global trade wars).
+    - Reliability of the "Tax Proxy" assumptions.
+
 **Format Rules:**
 - Use professional economic terminology (e.g., "fiscal consolidation", "counter-cyclical buffers", "revenue elasticity").
 - Use valid HTML tags: <h3>, <p>, <ul>, <li>, <strong>.
 - NO Markdown (no #, no **).
-- Length: Detailed and comprehensive (~800-1000 words).
+- Length: Detailed and comprehensive (~1000-1200 words).
 """
 
         response = client.chat.completions.create(
@@ -1368,6 +1372,16 @@ def generate_multi_oil_report(scenario_results, df, oil_prices, model, model_r2,
             </table>
         </div>
         
+        <div class="section">
+            <h2>⚠️ Data & Model Constraints</h2>
+            <ul>
+                <li><strong>Quarterly Frequency Estimates:</strong> Some historical tax data was annualized; quarterly splits are estimates based on economic activity.</li>
+                <li><strong>Tax Rate Proxies:</strong> Effective tax rates are derived from revenue/GDP ratios, not statutory filings, due to data privacy.</li>
+                <li><strong>Ceteris Paribus:</strong> The model assumes "all other things being equal" (e.g., no new wars, pandemics, or trade bans) outside the specified scenarios.</li>
+                <li><strong>Behavioral Response:</strong> Does not dynamically model tax evasion or capital flight responses to tax rate changes.</li>
+            </ul>
+        </div>
+        
         <div class="footer">
             <p>Nigeria Tax Model System | Multi-Scenario Oil Price Analysis</p>
             <p>Data Sources: NBS, CBN, World Bank, Google Data Commons, NRS Dashboard</p>
@@ -1487,6 +1501,16 @@ def generate_multi_oil_docx(filename, timestamp, summary, oil_prices, scenario_r
     doc.add_paragraph('Theoretical framework and source code available at:')
     doc.add_paragraph('https://github.com/oyesanyf/nigeria-tax-impact-model', style='List Bullet')
 
+    doc.add_heading('Model Limitations', level=1)
+    limitations = [
+        "Quarterly Frequency Estimates: Historical tax data annualized where quarterly data missing.",
+        "Tax Rate Proxies: Effective rates derived from revenue/GDP ratios, not statutory filings.",
+        "Ceteris Paribus: Assumes no major external shocks (wars, pandemics) outside specified scenarios.",
+        "Behavioral Response: Does not dynamically model tax evasion responses."
+    ]
+    for limit in limitations:
+        doc.add_paragraph(limit, style='List Bullet')
+
     doc.save(filename)
 
 
@@ -1578,9 +1602,25 @@ def generate_multi_oil_pdf(filename, timestamp, summary, oil_prices, scenario_re
     # GitHub Link
     pdf.ln(10)
     pdf.set_font("helvetica", 'I', 10)
-    pdf.set_text_color(0, 0, 255)
     pdf.cell(0, 10, "Source Code: https://github.com/oyesanyf/nigeria-tax-impact-model", ln=True, align='C', link="https://github.com/oyesanyf/nigeria-tax-impact-model")
             
+    # Limitations (New Page)
+    if pdf.get_y() > 200: pdf.add_page()
+    pdf.ln(10)
+    pdf.set_font("helvetica", 'B', 12)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 10, "Data & Model Constraints", ln=True)
+    pdf.set_font("helvetica", size=10)
+    
+    constraints = [
+        "- Quarterly Estimates: Historical splits are estimates based on economic activity.",
+        "- Tax Proxies: Effective rates derived from revenue/GDP, not statutory filings.",
+        "- Ceteris Paribus: Assumes 'all else equal' outside specified scenarios.",
+        "- Behavioral: Dynamic tax evasion responses are not modeled."
+    ]
+    for c in constraints:
+        pdf.cell(0, 6, c, ln=True)
+
     pdf.output(filename)
 
 
