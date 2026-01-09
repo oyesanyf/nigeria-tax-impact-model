@@ -29,7 +29,7 @@ def validate_api_keys():
     try:
         import openai
         client = openai.OpenAI(api_key=api_key)
-        client.models.list(limit=1) # Lightweight check
+        client.models.list() # Lightweight check
         print("✔ Success! AI Analysis enabled.")
     except Exception as e:
         print(f"\n❌ Validation Failed: {e}")

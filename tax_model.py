@@ -26,7 +26,7 @@ def validate_keys():
     try:
         import openai
         client = openai.OpenAI(api_key=api_key)
-        client.models.list(limit=1)
+        client.models.list()
         print("✔ Validated.")
     except Exception as e:
         print(f"\n   ❌ Key is set but INVALID: {e}")
