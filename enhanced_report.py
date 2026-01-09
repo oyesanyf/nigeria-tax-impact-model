@@ -676,6 +676,11 @@ def generate_enhanced_report(sim_results, df, oil_forecast, model, model_r2, n_s
         <div class="footer">
             <p>Nigeria Tax Model System | Powered by AutoML & Monte Carlo Simulation</p>
             <p>Data Sources: NBS, CBN, World Bank, Google Data Commons, NRS Dashboard</p>
+            <p style="margin-top: 15px;">
+                <a href="https://github.com/oyesanyf/nigeria-tax-impact-model" target="_blank" style="color: #667eea; text-decoration: none; font-weight: bold;">
+                    View Source Code on GitHub ↗
+                </a>
+            </p>
         </div>
     </body>
     </html>
@@ -770,11 +775,13 @@ def generate_docx_report(filename, timestamp, summary, df, model_r2, oil_forecas
         ('Data Commons', 'Tax Revenue, Inflation', 'Fills historical gaps (2000-2015)'),
         ('World Bank', 'Digital Penetration, Remittances', 'Modern impact factors')
     ]
-    for s, d, r in sources:
-        row_cells = ds_table.add_row().cells
         row_cells[0].text = s
         row_cells[1].text = d
         row_cells[2].text = r
+
+    doc.add_heading('Source Code', level=1)
+    doc.add_paragraph('Theoretical framework and source code available at:')
+    doc.add_paragraph('https://github.com/oyesanyf/nigeria-tax-impact-model', style='List Bullet')
 
     doc.save(filename)
 
@@ -849,6 +856,12 @@ def generate_pdf_report(filename, timestamp, summary, df, model_r2, oil_forecast
         pdf.cell(30, 8, s, 1)
         pdf.cell(80, 8, d, 1)
         pdf.cell(80, 8, r, 1, ln=True)
+
+    # GitHub Link
+    pdf.ln(10)
+    pdf.set_font("helvetica", 'I', 10)
+    pdf.set_text_color(0, 0, 255)
+    pdf.cell(0, 10, "Source Code: https://github.com/oyesanyf/nigeria-tax-impact-model", ln=True, align='C', link="https://github.com/oyesanyf/nigeria-tax-impact-model")
 
     pdf.output(filename)
 
@@ -979,6 +992,99 @@ def generate_multi_oil_charts(scenario_results, oil_prices, df, model_r2, model=
     return charts
 
 
+def generate_multi_oil_ai_summary(scenario_results, oil_prices, model_r2, n_simulations):
+    """Generate executive summary for multi-scenario report using OpenAI."""
+    try:
+        import openai
+        
+        # Check for API key
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return generate_multi_oil_fallback_summary(scenario_results, oil_prices, model_r2, n_simulations)
+        
+        client = openai.OpenAI(api_key=api_key)
+        
+        # Prepare data for prompt - ALL scenarios
+        scenario_data_str = ""
+        for p in sorted(oil_prices):
+            sim = scenario_results[p]
+            risk_old = (sim['GDP_Old'] < 0).mean() * 100
+            risk_new = (sim['GDP_New'] < 0).mean() * 100
+            risk_shock = (sim['GDP_Shock'] < 0).mean() * 100
+            mean_new = sim['GDP_New'].mean()
+            
+            scenario_data_str += f"- Oil @ ${p:.0f}: GDP Growth={mean_new:.2f}%, Risk(New Act)={risk_new:.1f}%, Risk(Old Law)={risk_old:.1f}%, Risk(Shock)={risk_shock:.1f}%\n"
+
+        prompt = f"""You are a Chief Economist advising the Nigerian Presidency. Write a comprehensive "Macroeconomic Impact Assessment" for the 2025 Reform Agenda.
+
+**Study Parameters:**
+- **Objective:** Evaluate the resilience of the New Tax Act (0% SME Tax, Digital VAT Enhancement) against global oil price shocks.
+- **Methodology:** {n_simulations} Monte Carlo simulations per scenario using an ML model (TPOT Optimized, R²={model_r2:.4f}).
+- **Scenarios Tested:** {len(oil_prices)} distinct oil price levels.
+
+**Simulation Data (By Oil Price Scenario):**
+{scenario_data_str}
+
+**Write a Detailed Strategic Report (HTML Format) covering:**
+
+1.  **<h3>Executive Overview</h3>**
+    - High-level synthesis of whether the New Tax Act is viable.
+    - The "Break-even" oil price where recession risk becomes acceptable (<10%).
+
+2.  **<h3>Scenario Deep-Dive</h3>**
+    - Analyze the Low-Price Scenarios (Risk analysis, fiscal buffers needed).
+    - Analyze the High-Price Scenarios (Growth opportunity, surplus allocation).
+    - Contrast the "New Tax Act" vs "Old Law" performance specifically.
+
+3.  **<h3>Structural Vulnerability Assessment</h3>**
+    - Discuss the dependency on oil vs tax efficiency.
+    - How much does the "Inflation Shock" scenario destabilize the reforms?
+
+4.  **<h3>Strategic Policy Recommendations</h3>**
+    - **Fiscal:** What should be done if oil drops below $60?
+    - **Monetary:** How to coordinate with CBN on inflation?
+    - **Implementation:** Critical success factors for the Digital VAT rollout.
+
+**Format Rules:**
+- Use professional economic terminology (e.g., "fiscal consolidation", "counter-cyclical buffers", "revenue elasticity").
+- Use valid HTML tags: <h3>, <p>, <ul>, <li>, <strong>.
+- NO Markdown (no #, no **).
+- Length: Detailed and comprehensive (~800-1000 words).
+"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o",  # Upgraded to GPT-4o for better reasoning
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3, # Slightly creativity for analysis
+            max_tokens=2500  # Allow long response
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        print(f"Warning: Could not generate AI summary: {e}")
+        return generate_multi_oil_fallback_summary(scenario_results, oil_prices, model_r2, n_simulations)
+
+
+def generate_multi_oil_fallback_summary(scenario_results, oil_prices, model_r2, n_simulations):
+    """Fallback summary template if AI fails."""
+    min_risk_price = min(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
+    max_risk_price = max(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
+    
+    return f"""
+    <h3>Multi-Scenario Oil Price Analysis</h3>
+    
+    <p><strong>Objective:</strong> This analysis compares the economic impact of Nigeria's Tax Act 2025 
+    across {len(oil_prices)} different oil price scenarios, ranging from ${min(oil_prices):.0f} to ${max(oil_prices):.0f} per barrel.</p>
+    
+    <p><strong>Key Finding:</strong> The optimal scenario occurs at <strong>${min_risk_price:.0f}/barrel</strong> 
+    (lowest recession risk under New Tax Act), while the highest risk is at <strong>${max_risk_price:.0f}/barrel</strong>.</p>
+    
+    <p><strong>Methodology:</strong> Each oil price scenario was simulated with {n_simulations:,} Monte Carlo iterations 
+    using the trained TPOT model (R² = {model_r2:.4f}). Recession risk is calculated as the probability of GDP growth falling below 0%.</p>
+    """
+
+
 def generate_multi_oil_report(scenario_results, df, oil_prices, model, model_r2, n_simulations):
     """Generate comprehensive HTML report comparing multiple oil price scenarios."""
     
@@ -1012,22 +1118,20 @@ def generate_multi_oil_report(scenario_results, df, oil_prices, model, model_r2,
     
     # Generate summary
     print("Generating executive summary...")
-    min_risk_price = min(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
-    max_risk_price = max(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
     
-    executive_summary = f"""
-    <h3>Multi-Scenario Oil Price Analysis</h3>
+    # Try AI summary first
+    executive_summary = generate_multi_oil_ai_summary(scenario_results, oil_prices, model_r2, n_simulations)
     
-    <p><strong>Objective:</strong> This analysis compares the economic impact of Nigeria's Tax Act 2025 
-    across {len(oil_prices)} different oil price scenarios, ranging from ${min(oil_prices):.0f} to ${max(oil_prices):.0f} per barrel.</p>
-    
-    <p><strong>Key Finding:</strong> The optimal scenario occurs at <strong>${min_risk_price:.0f}/barrel</strong> 
-    (lowest recession risk under New Tax Act), while the highest risk is at <strong>${max_risk_price:.0f}/barrel</strong>.</p>
-    
-    <p><strong>Methodology:</strong> Each oil price scenario was simulated with {n_simulations:,} Monte Carlo iterations 
-    using the trained TPOT model (R² = {model_r2:.4f}). Recession risk is calculated as the probability of GDP growth falling below 0%.</p>
-    """
-    
+    # Fallback to template if AI fails or returns None/Empty
+    if not executive_summary or "OpenAI" in executive_summary: # Basic check for valid content/error message
+         # Recalculate basic stats for fallback
+        min_risk_price = min(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
+        max_risk_price = max(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
+        
+        # Only overwrite if AI didn't work. If we have AI summary, skipping this block.
+        # But wait, generate_multi_oil_ai_summary handles fallback internally? No, I'll implement it to return fallback string if API fails.
+        pass # The function below will handle fallback logic
+
     # Build HTML
     html = f"""
     <!DOCTYPE html>
@@ -1249,6 +1353,11 @@ def generate_multi_oil_report(scenario_results, df, oil_prices, model, model_r2,
         <div class="footer">
             <p>Nigeria Tax Model System | Multi-Scenario Oil Price Analysis</p>
             <p>Data Sources: NBS, CBN, World Bank, Google Data Commons, NRS Dashboard</p>
+            <p style="margin-top: 15px;">
+                <a href="https://github.com/oyesanyf/nigeria-tax-impact-model" target="_blank" style="color: #3498db; text-decoration: none; font-weight: bold;">
+                    View Source Code on GitHub ↗
+                </a>
+            </p>
         </div>
     </body>
     </html>
@@ -1341,14 +1450,6 @@ def generate_multi_oil_docx(filename, timestamp, summary, oil_prices, scenario_r
 
     doc.add_heading('Visualizations', level=1)
     
-    chart_map = [
-        ('Oil Price Sensitivity Analysis', 'oil_sensitivity'),
-        ('Recession Risk Comparison', 'multi_risk_bars'),
-        ('GDP Growth Distribution', 'multi_distribution'),
-        ('GDP Growth Range', 'multi_boxplot'),
-        ('Policy Influence', 'sensitivity')
-    ]
-    
     for title, key in chart_map:
         if key in charts:
             doc.add_heading(title, level=2)
@@ -1357,6 +1458,10 @@ def generate_multi_oil_docx(filename, timestamp, summary, oil_prices, scenario_r
                 tmpfile_path = tmpfile.name
             doc.add_picture(tmpfile_path, width=Inches(6))
             os.unlink(tmpfile_path)
+
+    doc.add_heading('Source Code', level=1)
+    doc.add_paragraph('Theoretical framework and source code available at:')
+    doc.add_paragraph('https://github.com/oyesanyf/nigeria-tax-impact-model', style='List Bullet')
 
     doc.save(filename)
 
@@ -1439,6 +1544,12 @@ def generate_multi_oil_pdf(filename, timestamp, summary, oil_prices, scenario_re
             pdf.image(tmpfile_path, x=10, w=180)
             os.unlink(tmpfile_path)
             pdf.ln(5)
+            
+    # GitHub Link
+    pdf.ln(10)
+    pdf.set_font("helvetica", 'I', 10)
+    pdf.set_text_color(0, 0, 255)
+    pdf.cell(0, 10, "Source Code: https://github.com/oyesanyf/nigeria-tax-impact-model", ln=True, align='C', link="https://github.com/oyesanyf/nigeria-tax-impact-model")
             
     pdf.output(filename)
 
