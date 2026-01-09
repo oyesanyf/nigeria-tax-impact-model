@@ -1013,7 +1013,11 @@ def generate_multi_oil_ai_summary(scenario_results, oil_prices, model_r2, n_simu
             risk_shock = (sim['GDP_Shock'] < 0).mean() * 100
             mean_new = sim['GDP_New'].mean()
             
-            scenario_data_str += f"- Oil @ ${p:.0f}: GDP Growth={mean_new:.2f}%, Risk(New Act)={risk_new:.1f}%, Risk(Old Law)={risk_old:.1f}%, Risk(Shock)={risk_shock:.1f}%\n"
+            # Calculate range
+            p5 = np.percentile(sim['GDP_New'], 5)
+            p95 = np.percentile(sim['GDP_New'], 95)
+            
+            scenario_data_str += f"- Oil @ ${p:.0f}: GDP={mean_new:.2f}% (Range: {p5:.1f}% to {p95:.1f}%), Risk(New)={risk_new:.1f}%, Risk(Shock)={risk_shock:.1f}%\n"
 
         prompt = f"""You are a Chief Economist advising the Nigerian Presidency. Write a comprehensive "Macroeconomic Impact Assessment" for the 2025 Reform Agenda.
 
@@ -1100,18 +1104,30 @@ def generate_multi_oil_report(scenario_results, df, oil_prices, model, model_r2,
         sim = scenario_results[oil_price]
         risk_old = (sim['GDP_Old'] < 0).mean() * 100
         risk_new = (sim['GDP_New'] < 0).mean() * 100
-        risk_shock = (sim['GDP_Shock'] < 0).mean() * 100
         mean_gdp = sim['GDP_New'].mean()
         
-        risk_class = 'risk-high' if risk_new > 10 else 'risk-low'
+        # Calculate range
+        p5 = np.percentile(sim['GDP_New'], 5)
+        p95 = np.percentile(sim['GDP_New'], 95)
         
+        # Determine Status
+        if risk_new < 5:
+            status = "🟢 SAFE"
+            status_style = "color: #27ae60; font-weight: bold;"
+        elif risk_new <= 15:
+            status = "🟡 CAUTION"
+            status_style = "color: #f39c12; font-weight: bold;"
+        else:
+            status = "🔴 DANGER"
+            status_style = "color: #e74c3c; font-weight: bold;"
+            
         scenario_rows += f"""
         <tr>
             <td><strong>${oil_price:.0f}/barrel</strong></td>
             <td>{mean_gdp:.2f}%</td>
-            <td>{risk_old:.1f}%</td>
-            <td class="{risk_class}">{risk_new:.1f}%</td>
-            <td>{risk_shock:.1f}%</td>
+            <td style="font-family: monospace; font-size: 0.9em;">{p5:+.1f}% to {p95:+.1f}%</td>
+            <td class="{'risk-high' if risk_new > 10 else 'risk-low'}">{risk_new:.1f}%</td>
+            <td style="{status_style}">{status}</td>
             <td class="{'risk-low' if risk_new < risk_old else 'risk-high'}">{risk_new - risk_old:+.1f}pp</td>
         </tr>
         """
@@ -1287,14 +1303,13 @@ def generate_multi_oil_report(scenario_results, df, oil_prices, model, model_r2,
         
         <div class="section">
             <h2>📈 Scenario Comparison Table</h2>
-            <table>
                 <thead>
                     <tr>
                         <th>Oil Price</th>
                         <th>Mean GDP (New Law)</th>
-                        <th>Risk: Old Law</th>
-                        <th>Risk: New Law</th>
-                        <th>Risk: Shock</th>
+                        <th>90% Growth Range</th>
+                        <th>Recession Probability (New)</th>
+                        <th>Status</th>
                         <th>Policy Impact</th>
                     </tr>
                 </thead>
@@ -1302,6 +1317,9 @@ def generate_multi_oil_report(scenario_results, df, oil_prices, model, model_r2,
                     {scenario_rows}
                 </tbody>
             </table>
+            <div style="font-size: 0.85em; color: #7f8c8d; text-align: right; margin-top: -10px;">
+                🟢 Safe (<5% Risk) &nbsp; | &nbsp; 🟡 Caution (5-15% Risk) &nbsp; | &nbsp; 🔴 Danger (>15% Risk)
+            </div>
         </div>
         
         <div class="section">
@@ -1427,25 +1445,31 @@ def generate_multi_oil_docx(filename, timestamp, summary, oil_prices, scenario_r
     comp_table = doc.add_table(rows=1, cols=6)
     hdr = comp_table.rows[0].cells
     hdr[0].text = 'Oil Price'
-    hdr[1].text = 'Mean GDP (New Law)'
-    hdr[2].text = 'Risk: Old Law'
-    hdr[3].text = 'Risk: New Law'
-    hdr[4].text = 'Risk: Shock'
-    hdr[5].text = 'Policy Impact'
+    hdr[1].text = 'Mean GDP'
+    hdr[2].text = '90% Range'
+    hdr[3].text = 'Risk (New)'
+    hdr[4].text = 'Status'
+    hdr[5].text = 'Impact'
     
     for oil_price in oil_prices:
         sim = scenario_results[oil_price]
         risk_old = (sim['GDP_Old'] < 0).mean() * 100
         risk_new = (sim['GDP_New'] < 0).mean() * 100
-        risk_shock = (sim['GDP_Shock'] < 0).mean() * 100
         mean_gdp = sim['GDP_New'].mean()
+        p5 = np.percentile(sim['GDP_New'], 5)
+        p95 = np.percentile(sim['GDP_New'], 95)
+        
+        # Determine Status
+        if risk_new < 5: status = "SAFE"
+        elif risk_new <= 15: status = "CAUTION"
+        else: status = "DANGER"
         
         row = comp_table.add_row().cells
-        row[0].text = f"${oil_price:.0f}/barrel"
+        row[0].text = f"${oil_price:.0f}"
         row[1].text = f"{mean_gdp:.2f}%"
-        row[2].text = f"{risk_old:.1f}%"
+        row[2].text = f"{p5:+.1f}% to {p95:+.1f}%"
         row[3].text = f"{risk_new:.1f}%"
-        row[4].text = f"{risk_shock:.1f}%"
+        row[4].text = status
         row[5].text = f"{risk_new - risk_old:+.1f}pp"
 
     doc.add_heading('Visualizations', level=1)
@@ -1497,26 +1521,32 @@ def generate_multi_oil_pdf(filename, timestamp, summary, oil_prices, scenario_re
     pdf.set_font("courier", size=9) # Monospace for alignment
     
     # Header
-    pdf.cell(25, 8, "Price", 1)
-    pdf.cell(25, 8, "GDP(New)", 1)
-    pdf.cell(30, 8, "Risk(Old)", 1)
-    pdf.cell(30, 8, "Risk(New)", 1)
-    pdf.cell(30, 8, "Risk(Shock)", 1)
-    pdf.cell(30, 8, "Impact", 1, ln=True)
+    pdf.cell(20, 8, "Price", 1)
+    pdf.cell(20, 8, "GDP", 1)
+    pdf.cell(50, 8, "90% Range", 1)
+    pdf.cell(25, 8, "Risk(New)", 1)
+    pdf.cell(25, 8, "Status", 1)
+    pdf.cell(25, 8, "Impact", 1, ln=True)
     
     for oil_price in oil_prices:
         sim = scenario_results[oil_price]
         risk_old = (sim['GDP_Old'] < 0).mean() * 100
         risk_new = (sim['GDP_New'] < 0).mean() * 100
-        risk_shock = (sim['GDP_Shock'] < 0).mean() * 100
         mean_gdp = sim['GDP_New'].mean()
+        p5 = np.percentile(sim['GDP_New'], 5)
+        p95 = np.percentile(sim['GDP_New'], 95)
         
-        pdf.cell(25, 8, f"${oil_price:.0f}", 1)
-        pdf.cell(25, 8, f"{mean_gdp:.2f}%", 1)
-        pdf.cell(30, 8, f"{risk_old:.1f}%", 1)
-        pdf.cell(30, 8, f"{risk_new:.1f}%", 1)
-        pdf.cell(30, 8, f"{risk_shock:.1f}%", 1)
-        pdf.cell(30, 8, f"{risk_new - risk_old:+.1f}pp", 1, ln=True)
+        # Determine Status
+        if risk_new < 5: status = "SAFE"
+        elif risk_new <= 15: status = "CAUTION"
+        else: status = "DANGER"
+        
+        pdf.cell(20, 8, f"${oil_price:.0f}", 1)
+        pdf.cell(20, 8, f"{mean_gdp:.2f}%", 1)
+        pdf.cell(50, 8, f"{p5:+.1f}% to {p95:+.1f}%", 1)
+        pdf.cell(25, 8, f"{risk_new:.1f}%", 1)
+        pdf.cell(25, 8, status, 1)
+        pdf.cell(25, 8, f"{risk_new - risk_old:+.1f}pp", 1, ln=True)
         
     pdf.ln(10)
     
