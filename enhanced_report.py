@@ -852,5 +852,421 @@ def generate_pdf_report(filename, timestamp, summary, df, model_r2, oil_forecast
 
     pdf.output(filename)
 
+
+def generate_multi_oil_charts(scenario_results, oil_prices, df, model_r2, model=None):
+    """Generate comparative charts for multiple oil price scenarios."""
+    charts = {}
+    
+    # Define a color palette for different oil prices
+    colors = ['#e74c3c', '#3498db', '#27ae60', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
+    
+    # Chart 1: GDP Distribution Comparison (New Law only) across oil prices
+    fig, ax = plt.subplots(figsize=(14, 7))
+    for i, (oil_price, sim_results) in enumerate(scenario_results.items()):
+        color = colors[i % len(colors)]
+        sns.kdeplot(data=sim_results['GDP_New'], fill=True, color=color, 
+                    label=f'Oil @ ${oil_price:.0f}', alpha=0.4, ax=ax)
+    ax.axvline(x=0, color='black', linestyle='--', linewidth=2, label='Recession Threshold')
+    ax.set_xlabel('Projected GDP Growth (%)', fontsize=12)
+    ax.set_ylabel('Probability Density', fontsize=12)
+    ax.set_title('GDP Growth Distribution by Oil Price Scenario (New Tax Act 2025)', fontsize=14, fontweight='bold')
+    ax.legend(fontsize=10)
+    charts['multi_distribution'] = fig_to_base64(fig)
+    plt.close(fig)
+    
+    # Chart 2: Recession Risk Bar Comparison
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    x_labels = [f'${p:.0f}' for p in oil_prices]
+    x_pos = np.arange(len(oil_prices))
+    width = 0.25
+    
+    risks_old = [(scenario_results[p]['GDP_Old'] < 0).mean() * 100 for p in oil_prices]
+    risks_new = [(scenario_results[p]['GDP_New'] < 0).mean() * 100 for p in oil_prices]
+    risks_shock = [(scenario_results[p]['GDP_Shock'] < 0).mean() * 100 for p in oil_prices]
+    
+    bars1 = ax.bar(x_pos - width, risks_old, width, label='Old Law', color='#e74c3c', alpha=0.8)
+    bars2 = ax.bar(x_pos, risks_new, width, label='New Tax Act', color='#3498db', alpha=0.8)
+    bars3 = ax.bar(x_pos + width, risks_shock, width, label='Inflation Shock', color='#f39c12', alpha=0.8)
+    
+    ax.set_xlabel('Oil Price ($/barrel)', fontsize=12)
+    ax.set_ylabel('Recession Risk (%)', fontsize=12)
+    ax.set_title('Recession Risk Across Oil Price Scenarios', fontsize=14, fontweight='bold')
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(x_labels)
+    ax.legend()
+    ax.axhline(y=10, color='red', linestyle='--', linewidth=1, alpha=0.5)
+    
+    # Add value labels on bars
+    for bars in [bars1, bars2, bars3]:
+        for bar in bars:
+            height = bar.get_height()
+            if height > 1:  # Only label if visible
+                ax.text(bar.get_x() + bar.get_width()/2., height + 0.5,
+                        f'{height:.0f}%', ha='center', va='bottom', fontsize=8)
+    
+    charts['multi_risk_bars'] = fig_to_base64(fig)
+    plt.close(fig)
+    
+    # Chart 3: GDP Growth Trend by Oil Price (Box Plot)
+    fig, ax = plt.subplots(figsize=(14, 6))
+    
+    box_data = []
+    box_labels = []
+    for oil_price in oil_prices:
+        box_data.append(scenario_results[oil_price]['GDP_New'])
+        box_labels.append(f'${oil_price:.0f}')
+    
+    bp = ax.boxplot(box_data, labels=box_labels, patch_artist=True)
+    for i, patch in enumerate(bp['boxes']):
+        patch.set_facecolor(colors[i % len(colors)])
+        patch.set_alpha(0.6)
+    
+    ax.axhline(y=0, color='red', linestyle='--', linewidth=1.5, label='Recession Line')
+    ax.set_xlabel('Oil Price ($/barrel)', fontsize=12)
+    ax.set_ylabel('GDP Growth (%)', fontsize=12)
+    ax.set_title('GDP Growth Range by Oil Price (New Tax Act)', fontsize=14, fontweight='bold')
+    ax.legend()
+    charts['multi_boxplot'] = fig_to_base64(fig)
+    plt.close(fig)
+    
+    # Chart 4: Oil Price Sensitivity Line Chart
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    sorted_prices = sorted(oil_prices)
+    mean_gdp_old = [scenario_results[p]['GDP_Old'].mean() for p in sorted_prices]
+    mean_gdp_new = [scenario_results[p]['GDP_New'].mean() for p in sorted_prices]
+    mean_gdp_shock = [scenario_results[p]['GDP_Shock'].mean() for p in sorted_prices]
+    
+    ax.plot(sorted_prices, mean_gdp_old, 'o-', color='#e74c3c', linewidth=2, markersize=8, label='Old Law')
+    ax.plot(sorted_prices, mean_gdp_new, 's-', color='#3498db', linewidth=2, markersize=8, label='New Tax Act')
+    ax.plot(sorted_prices, mean_gdp_shock, '^-', color='#f39c12', linewidth=2, markersize=8, label='Inflation Shock')
+    
+    ax.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+    ax.fill_between(sorted_prices, 0, mean_gdp_new, where=[g > 0 for g in mean_gdp_new], 
+                     color='#27ae60', alpha=0.1, label='Positive Growth Zone')
+    ax.fill_between(sorted_prices, 0, mean_gdp_new, where=[g < 0 for g in mean_gdp_new], 
+                     color='#e74c3c', alpha=0.1, label='Recession Zone')
+    
+    ax.set_xlabel('Oil Price ($/barrel)', fontsize=12)
+    ax.set_ylabel('Mean GDP Growth (%)', fontsize=12)
+    ax.set_title('Oil Price Sensitivity Analysis', fontsize=14, fontweight='bold')
+    ax.legend(loc='best')
+    ax.grid(True, alpha=0.3)
+    charts['oil_sensitivity'] = fig_to_base64(fig)
+    plt.close(fig)
+    
+    # Chart 5: Historical GDP (same as regular report)
+    fig, ax = plt.subplots(figsize=(12, 5))
+    df_plot = df[['GDP_Growth']].dropna()
+    ax.plot(df_plot.index, df_plot['GDP_Growth'], color='#2c3e50', linewidth=2)
+    ax.fill_between(df_plot.index, 0, df_plot['GDP_Growth'], where=(df_plot['GDP_Growth'] > 0), 
+                     color='#27ae60', alpha=0.3, label='Positive Growth')
+    ax.fill_between(df_plot.index, 0, df_plot['GDP_Growth'], where=(df_plot['GDP_Growth'] < 0), 
+                     color='#e74c3c', alpha=0.3, label='Recession')
+    ax.axhline(y=0, color='black', linestyle='-', linewidth=0.8)
+    ax.set_xlabel('Year', fontsize=12)
+    ax.set_ylabel('GDP Growth (%)', fontsize=12)
+    ax.set_title('Historical GDP Growth (Training Data)', fontsize=14, fontweight='bold')
+    ax.legend()
+    charts['historical'] = fig_to_base64(fig)
+    plt.close(fig)
+    
+    # Chart 6: Sensitivity Analysis (if model provided)
+    if model is not None:
+        charts['sensitivity'] = generate_sensitivity_chart(model, df)
+    
+    return charts
+
+
+def generate_multi_oil_report(scenario_results, df, oil_prices, model, model_r2, n_simulations):
+    """Generate comprehensive HTML report comparing multiple oil price scenarios."""
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Generate comparative charts
+    print("Generating multi-scenario visualizations...")
+    charts = generate_multi_oil_charts(scenario_results, oil_prices, df, model_r2, model=model)
+    
+    # Build scenario comparison table
+    scenario_rows = ""
+    for oil_price in oil_prices:
+        sim = scenario_results[oil_price]
+        risk_old = (sim['GDP_Old'] < 0).mean() * 100
+        risk_new = (sim['GDP_New'] < 0).mean() * 100
+        risk_shock = (sim['GDP_Shock'] < 0).mean() * 100
+        mean_gdp = sim['GDP_New'].mean()
+        
+        risk_class = 'risk-high' if risk_new > 10 else 'risk-low'
+        
+        scenario_rows += f"""
+        <tr>
+            <td><strong>${oil_price:.0f}/barrel</strong></td>
+            <td>{mean_gdp:.2f}%</td>
+            <td>{risk_old:.1f}%</td>
+            <td class="{risk_class}">{risk_new:.1f}%</td>
+            <td>{risk_shock:.1f}%</td>
+            <td class="{'risk-low' if risk_new < risk_old else 'risk-high'}">{risk_new - risk_old:+.1f}pp</td>
+        </tr>
+        """
+    
+    # Generate summary
+    print("Generating executive summary...")
+    min_risk_price = min(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
+    max_risk_price = max(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
+    
+    executive_summary = f"""
+    <h3>Multi-Scenario Oil Price Analysis</h3>
+    
+    <p><strong>Objective:</strong> This analysis compares the economic impact of Nigeria's Tax Act 2025 
+    across {len(oil_prices)} different oil price scenarios, ranging from ${min(oil_prices):.0f} to ${max(oil_prices):.0f} per barrel.</p>
+    
+    <p><strong>Key Finding:</strong> The optimal scenario occurs at <strong>${min_risk_price:.0f}/barrel</strong> 
+    (lowest recession risk under New Tax Act), while the highest risk is at <strong>${max_risk_price:.0f}/barrel</strong>.</p>
+    
+    <p><strong>Methodology:</strong> Each oil price scenario was simulated with {n_simulations:,} Monte Carlo iterations 
+    using the trained TPOT model (R² = {model_r2:.4f}). Recession risk is calculated as the probability of GDP growth falling below 0%.</p>
+    """
+    
+    # Build HTML
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Multi-Scenario Oil Price Analysis - {timestamp}</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                max-width: 1400px;
+                margin: 0 auto;
+                padding: 30px;
+                background-color: #f5f7fa;
+                color: #2c3e50;
+                line-height: 1.6;
+            }}
+            .header {{
+                background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+                color: white;
+                padding: 40px;
+                border-radius: 10px;
+                margin-bottom: 30px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }}
+            h1 {{
+                margin: 0;
+                font-size: 2.5em;
+            }}
+            .timestamp {{
+                opacity: 0.9;
+                font-size: 0.9em;
+                margin-top: 10px;
+            }}
+            .section {{
+                background: white;
+                padding: 30px;
+                margin-bottom: 30px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }}
+            h2 {{
+                color: #3498db;
+                border-bottom: 3px solid #3498db;
+                padding-bottom: 10px;
+                margin-top: 0;
+            }}
+            .metric-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+                margin: 20px 0;
+            }}
+            .metric-card {{
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                padding: 20px;
+                border-radius: 8px;
+                border-left: 5px solid #3498db;
+                text-align: center;
+            }}
+            .metric-label {{
+                font-size: 0.9em;
+                color: #7f8c8d;
+                margin-bottom: 5px;
+            }}
+            .metric-value {{
+                font-size: 2em;
+                font-weight: bold;
+                color: #2c3e50;
+            }}
+            .chart-container {{
+                margin: 30px 0;
+                text-align: center;
+            }}
+            .chart-container img {{
+                max-width: 100%;
+                border-radius: 8px;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }}
+            .risk-high {{ color: #e74c3c; font-weight: bold; }}
+            .risk-low {{ color: #27ae60; font-weight: bold; }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+            }}
+            th, td {{
+                padding: 12px;
+                text-align: center;
+                border-bottom: 1px solid #ecf0f1;
+            }}
+            th {{
+                background-color: #3498db;
+                color: white;
+            }}
+            tr:hover {{
+                background-color: #f8f9fa;
+            }}
+            .footer {{
+                text-align: center;
+                color: #7f8c8d;
+                font-size: 0.9em;
+                margin-top: 50px;
+                padding-top: 20px;
+                border-top: 1px solid #ecf0f1;
+            }}
+            .highlight-box {{
+                background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+                color: white;
+                padding: 20px;
+                border-radius: 8px;
+                margin: 20px 0;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🛢️ Multi-Scenario Oil Price Analysis</h1>
+            <div class="timestamp">Generated: {datetime.now().strftime("%B %d, %Y at %I:%M %p")}</div>
+            <div class="timestamp">Report ID: {timestamp}</div>
+            <div class="timestamp">Oil Prices Analyzed: {', '.join([f'${p:.0f}' for p in oil_prices])}</div>
+        </div>
+        
+        <div class="section">
+            {executive_summary}
+        </div>
+        
+        <div class="section">
+            <h2>📊 Key Metrics</h2>
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Oil Price Scenarios</div>
+                    <div class="metric-value">{len(oil_prices)}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Simulations per Scenario</div>
+                    <div class="metric-value">{n_simulations:,}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Total Simulations</div>
+                    <div class="metric-value">{n_simulations * len(oil_prices):,}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Model R²</div>
+                    <div class="metric-value">{model_r2:.1%}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Best Scenario</div>
+                    <div class="metric-value">${min_risk_price:.0f}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📈 Scenario Comparison Table</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Oil Price</th>
+                        <th>Mean GDP (New Law)</th>
+                        <th>Risk: Old Law</th>
+                        <th>Risk: New Law</th>
+                        <th>Risk: Shock</th>
+                        <th>Policy Impact</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {scenario_rows}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2>📉 Visualizations</h2>
+            
+            <div class="chart-container">
+                <h3>Oil Price Sensitivity Analysis</h3>
+                <p style="font-size: 0.9em; color: #7f8c8d;">How GDP growth changes as oil price varies</p>
+                <img src="data:image/png;base64,{charts['oil_sensitivity']}" alt="Oil Sensitivity">
+            </div>
+            
+            <div class="chart-container">
+                <h3>Recession Risk by Oil Price & Policy</h3>
+                <img src="data:image/png;base64,{charts['multi_risk_bars']}" alt="Risk Comparison">
+            </div>
+            
+            <div class="chart-container">
+                <h3>GDP Growth Distribution by Oil Price (New Tax Act)</h3>
+                <img src="data:image/png;base64,{charts['multi_distribution']}" alt="Distribution">
+            </div>
+            
+            <div class="chart-container">
+                <h3>GDP Growth Range by Oil Price</h3>
+                <img src="data:image/png;base64,{charts['multi_boxplot']}" alt="Box Plot">
+            </div>
+            
+            <div class="chart-container">
+                <h3>Historical GDP Growth (Training Data)</h3>
+                <img src="data:image/png;base64,{charts['historical']}" alt="Historical">
+            </div>
+            
+            <div class="chart-container">
+                <h3>Policy Influence: Factor Importance</h3>
+                <img src="data:image/png;base64,{charts['sensitivity']}" alt="Sensitivity">
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>🧠 Methodology</h2>
+            <table>
+                <tr><td><strong>Scenarios Tested:</strong></td><td>{len(oil_prices)} oil prices × 3 policy scenarios = {len(oil_prices) * 3} combinations</td></tr>
+                <tr><td><strong>Monte Carlo Iterations:</strong></td><td>{n_simulations:,} per scenario</td></tr>
+                <tr><td><strong>Oil Price Uncertainty:</strong></td><td>±$10/barrel (Normal distribution)</td></tr>
+                <tr><td><strong>ML Framework:</strong></td><td>TPOT AutoML (Genetic Programming)</td></tr>
+                <tr><td><strong>Model Accuracy:</strong></td><td>R² = {model_r2:.4f}</td></tr>
+            </table>
+        </div>
+        
+        <div class="footer">
+            <p>Nigeria Tax Model System | Multi-Scenario Oil Price Analysis</p>
+            <p>Data Sources: NBS, CBN, World Bank, Google Data Commons, NRS Dashboard</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    # Save report
+    os.makedirs('reports', exist_ok=True)
+    base_filename = f"reports/oil_scenario_report_{timestamp}"
+    html_filename = f"{base_filename}.html"
+    with open(html_filename, 'w', encoding='utf-8') as f:
+        f.write(html)
+    
+    paths = {"html": os.path.abspath(html_filename)}
+    
+    print(f"✔ Multi-scenario report saved: {html_filename}")
+    
+    return paths
+
+
 if __name__ == "__main__":
     print("This module should be imported by nigeria_tax_model.py")

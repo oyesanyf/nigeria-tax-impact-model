@@ -14,7 +14,6 @@ SEED = 42
 FORECAST_HORIZON = 4  # Forecast 4 Quarters (2026)
 # Allow override via environment variable (set by tax_model.py --simulations flag)
 N_SIMULATIONS = int(os.environ.get('N_SIMULATIONS', 1000))  # Monte Carlo Iterations
-
 # ==========================================
 # SECTION 1: DATA INGESTION (PLACEHOLDERS)
 # ==========================================
@@ -79,7 +78,38 @@ def forecast_exogenous_vars(df):
     """
     Uses AutoARIMA to predict what Oil Prices would be in 2026
     WITHOUT any intervention.
+    
+    If OVERRIDE_OIL_PRICE environment variable is set (comma-separated values),
+    each value becomes a SEPARATE SCENARIO for comparison.
+    Example: OVERRIDE_OIL_PRICE="68,90,70,100" creates 4 oil price scenarios.
+    
+    Returns:
+        tuple: (oil_forecast_array, oil_scenarios_list or None)
+        - oil_forecast_array: numpy array of oil prices (for backward compatibility)
+        - oil_scenarios_list: list of individual prices if custom scenarios, None if AutoARIMA
     """
+    
+    # Check for custom oil price override
+    custom_oil_prices = os.environ.get('OVERRIDE_OIL_PRICE')
+    
+    if custom_oil_prices:
+        print("\n[Oil Scenarios] Using CUSTOM oil prices for SCENARIO COMPARISON...")
+        try:
+            prices = [float(p.strip()) for p in custom_oil_prices.split(',')]
+            
+            print(f"--> Oil Price Scenarios to Model: {prices}")
+            print(f"--> Number of Scenarios: {len(prices)}")
+            
+            # Return as both array (for compatibility) and list (for scenarios)
+            oil_forecast_2026 = np.array(prices)
+            
+            return oil_forecast_2026, prices
+            
+        except ValueError as e:
+            print(f"   ❌ Error parsing custom oil prices: {e}")
+            print("   Falling back to AutoARIMA...")
+    
+    # Default: Use AutoARIMA
     print("\n[AutoTS] Running AutoARIMA to forecast Oil Prices for 2026...")
    
     # Auto-discover the best (p,d,q) model for Oil Prices
@@ -92,7 +122,78 @@ def forecast_exogenous_vars(df):
     print(f"--> AutoARIMA Selected Model: {oil_model.order}")
     print(f"--> 2026 Oil Forecast (Avg): ${oil_forecast_2026.mean():.2f}")
    
-    return oil_forecast_2026
+    return oil_forecast_2026, None
+
+
+def simulate_oil_price_scenarios(df, oil_prices, tpot_model):
+    """
+    Run Monte Carlo simulations for EACH oil price scenario.
+    Returns a dictionary of DataFrames, one per oil price.
+    """
+    from tqdm import tqdm
+    
+    # Load Scenario Configuration
+    config = load_config()
+    scenarios = config.get("scenarios", [])
+    
+    print(f"\n[Multi-Scenario Simulation] Running {N_SIMULATIONS} iterations for {len(oil_prices)} oil prices × {len(scenarios)} policy scenarios...")
+    
+    all_results = {}
+    
+    # Get latest WDI/Inflation values (Baseline)
+    last_digi = df['Digital_Penetration'].iloc[-1] if 'Digital_Penetration' in df else 0
+    last_remit = df['Remittances_USD'].iloc[-1] if 'Remittances_USD' in df else 0
+    last_inf = df['Inflation_Rate'].iloc[-1] if 'Inflation_Rate' in df else 15.0
+    
+    oil_std = config.get("simulation", {}).get("oil_price_uncertainty_std", 10.0)
+    
+    for oil_price in oil_prices:
+        print(f"\n  📊 Simulating Oil @ ${oil_price:.0f}/barrel...")
+        results = []
+        
+        # Run Monte Carlo Loop for this oil price
+        for _ in tqdm(range(N_SIMULATIONS), desc=f"Oil=${oil_price:.0f}", unit="run", leave=False):
+            # 1. Stochastic Oil Price around the given price
+            sim_oil = np.random.normal(oil_price, oil_std)
+            
+            # Dictionary to store this run's results
+            run_result = {}
+            
+            # 2. Iterate through configurable scenarios
+            for scen in scenarios:
+                name = scen["name"]
+                params = scen["params"]
+                
+                # Construct Input Vector
+                sim_digi = last_digi * params.get("Digital_Multiplier", 1.0)
+                sim_inf = last_inf * params.get("Inflation_Multiplier", 1.0)
+                
+                # Create DataFrame for prediction
+                input_df = pd.DataFrame([{
+                    "Oil_Price": sim_oil,
+                    "SME_Tax": params.get("SME_Tax", 25.0),
+                    "VAT_Recovery": params.get("VAT_Recovery", 55.0),
+                    "Digital_Penetration": sim_digi,
+                    "Remittances_USD": last_remit,
+                    "Inflation_Rate": sim_inf
+                }])
+                
+                # Predict
+                pred_gdp = tpot_model.predict(input_df)[0]
+                
+                # Store with expected keys
+                if "Old" in name: key = "GDP_Old"
+                elif "New" in name: key = "GDP_New"
+                elif "Shock" in name: key = "GDP_Shock"
+                else: key = f"GDP_{name.replace(' ', '_')}"
+                
+                run_result[key] = pred_gdp
+                
+            results.append(run_result)
+        
+        all_results[oil_price] = pd.DataFrame(results)
+    
+    return all_results
 
 # ==========================================
 # SECTION 3: AUTOML (Learning the Economy)
@@ -271,16 +372,10 @@ def main():
         df = load_data()
        
         # 2. Auto Time Series (Predict the Environment)
-        oil_forecast = forecast_exogenous_vars(df)
+        oil_forecast, oil_scenarios = forecast_exogenous_vars(df)
        
         # 3. AutoML (Learn the Logic)
         model = train_automl_impact_model(df)
-       
-        # 4. Simulation (Test the Policy)
-        sim_results = simulate_impact(df, oil_forecast, model)
-       
-        # 5. Generate Enhanced Report
-        import enhanced_report
         
         # Calculate R2 for the report
         from sklearn.metrics import r2_score
@@ -290,26 +385,74 @@ def main():
         y_pred = model.predict(X_test_data)
         model_r2 = r2_score(y_test_data, y_pred)
         
-        report_paths = enhanced_report.generate_enhanced_report(
-            sim_results=sim_results,
-            df=df,
-            oil_forecast=oil_forecast,
-            model=model,
-            model_r2=model_r2,
-            n_simulations=N_SIMULATIONS
-        )
+        import enhanced_report
         
-        # Print summary to console
-        risk_old = (sim_results['GDP_Old'] < 0).mean() * 100
-        risk_new = (sim_results['GDP_New'] < 0).mean() * 100
-        risk_shock = (sim_results['GDP_Shock'] < 0).mean() * 100
+        # Check if we're running multi-scenario mode (custom oil prices)
+        if oil_scenarios is not None and len(oil_scenarios) > 0:
+            # =====================================================
+            # MULTI-SCENARIO MODE: Run for each oil price
+            # =====================================================
+            print(f"\n{'='*60}")
+            print(f"MULTI-SCENARIO OIL PRICE ANALYSIS")
+            print(f"{'='*60}")
+            
+            # Run simulations for each oil price
+            all_scenario_results = simulate_oil_price_scenarios(df, oil_scenarios, model)
+            
+            # Generate comparative report for all oil price scenarios
+            report_paths = enhanced_report.generate_multi_oil_report(
+                scenario_results=all_scenario_results,
+                df=df,
+                oil_prices=oil_scenarios,
+                model=model,
+                model_r2=model_r2,
+                n_simulations=N_SIMULATIONS
+            )
+            
+            # Print summary for each oil price scenario
+            print(f"\n{'='*60}")
+            print(f"MULTI-SCENARIO RESULTS SUMMARY")
+            print(f"{'='*60}")
+            
+            for oil_price, sim_results in all_scenario_results.items():
+                risk_old = (sim_results['GDP_Old'] < 0).mean() * 100
+                risk_new = (sim_results['GDP_New'] < 0).mean() * 100
+                risk_shock = (sim_results['GDP_Shock'] < 0).mean() * 100
+                
+                print(f"\n🛢️  Oil @ ${oil_price:.0f}/barrel:")
+                print(f"    Recession Risk (Old Law):        {risk_old:.1f}%")
+                print(f"    Recession Risk (New Law):        {risk_new:.1f}%")
+                print(f"    Recession Risk (Inflation Shock): {risk_shock:.1f}%")
+            
+        else:
+            # =====================================================
+            # STANDARD MODE: Single AutoARIMA-based simulation
+            # =====================================================
+            # 4. Simulation (Test the Policy)
+            sim_results = simulate_impact(df, oil_forecast, model)
+           
+            # 5. Generate Enhanced Report
+            report_paths = enhanced_report.generate_enhanced_report(
+                sim_results=sim_results,
+                df=df,
+                oil_forecast=oil_forecast,
+                model=model,
+                model_r2=model_r2,
+                n_simulations=N_SIMULATIONS
+            )
+            
+            # Print summary to console
+            risk_old = (sim_results['GDP_Old'] < 0).mean() * 100
+            risk_new = (sim_results['GDP_New'] < 0).mean() * 100
+            risk_shock = (sim_results['GDP_Shock'] < 0).mean() * 100
+            
+            print(f"\n{'='*60}")
+            print(f"RESULTS SUMMARY")
+            print(f"{'='*60}")
+            print(f"Recession Risk (Old Law):        {risk_old:.1f}%")
+            print(f"Recession Risk (New Law):        {risk_new:.1f}%")
+            print(f"Recession Risk (Inflation Shock): {risk_shock:.1f}%")
         
-        print(f"\n{'='*60}")
-        print(f"RESULTS SUMMARY")
-        print(f"{'='*60}")
-        print(f"Recession Risk (Old Law):        {risk_old:.1f}%")
-        print(f"Recession Risk (New Law):        {risk_new:.1f}%")
-        print(f"Recession Risk (Inflation Shock): {risk_shock:.1f}%")
         print(f"{'='*60}")
         print(f"\n📄 GENERATED REPORTS:")
         if "html" in report_paths: print(f"   --> HTML: {report_paths['html']}")

@@ -37,6 +37,9 @@ def main():
     parser.add_argument('--sme-tax', type=float, help="Override SME Tax Rate for New Law scenario (default: 0.0)")
     parser.add_argument('--vat-recovery', type=float, help="Override VAT Recovery Rate for New Law scenario (default: 95.0)")
     parser.add_argument('--inflation-shock', type=float, help="Override Inflation Shock Multiplier (default: 1.5)")
+    
+    parser.add_argument('--oil-price', type=str, 
+                        help="Custom oil prices (comma-separated) for scenario comparison.\nExample: --oil-price 60,70,80,90\nEach price becomes a separate scenario with its own simulation and charts.\nIf provided, AutoARIMA forecasting is skipped.")
 
     args = parser.parse_args()
 
@@ -59,6 +62,11 @@ def main():
     if args.inflation_shock is not None:
         os.environ['OVERRIDE_INFLATION_SHOCK'] = str(args.inflation_shock)
         print(f"🔹 Override: Setting Inflation Shock Multiplier to {args.inflation_shock}x")
+        
+    if args.oil_price is not None:
+        os.environ['OVERRIDE_OIL_PRICE'] = args.oil_price
+        prices = [float(p.strip()) for p in args.oil_price.split(',')]
+        print(f"🔹 Override: Using custom oil prices: {prices} (AutoARIMA skipped)")
 
     print("Starting Nigeria Tax Model System (End-to-End)...")
     
