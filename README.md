@@ -68,6 +68,22 @@ These flags allow you to override factors in the **New Tax Act** and **Inflation
 | `--sme-tax [VAL]` | Set a custom CIT rate for SMEs (e.g., test a 5% compromise). | `python tax_model.py --sme-tax 5.0` |
 | `--vat-recovery [VAL]` | Test different digital collection efficiency levels (e.g. 80%). | `python tax_model.py --vat-recovery 80.0` |
 | `--inflation-shock [VAL]` | Set the multiplier for the extreme inflation scenario (e.g. 2.0 = 100% spike). | `python tax_model.py --inflation-shock 2.0` |
+| `--oil-price [PRICES]` | Compare multiple oil price scenarios (comma-separated). | `python tax_model.py --oil-price 60,80,100` |
+
+### 🛢️ Multi-Scenario Oil Price Analysis
+
+The `--oil-price` flag enables **comparative analysis across multiple oil price assumptions**. Each price becomes a separate scenario with its own Monte Carlo simulation.
+
+```bash
+# Compare 4 different oil price scenarios
+python tax_model.py --oil-price 60,70,80,90 --simulations 1000
+```
+
+**What This Generates:**
+- 📊 **Oil Price Sensitivity Chart:** Line chart showing how GDP changes as oil prices vary
+- 📈 **Recession Risk Comparison:** Grouped bar chart comparing Old Law vs New Law vs Shock for each oil price
+- 📉 **GDP Distribution Overlays:** KDE plots showing probability distributions for each scenario
+- 📋 **Comparison Table:** All scenarios with recession risk metrics and policy impact
 
 ---
 
@@ -101,6 +117,12 @@ python tax_model.py --inflation-shock 4.0 --skip-fetch
 Run the full simulation using only local files (perfect for poor connectivity):
 ```bash
 python tax_model.py --skip-fetch
+```
+
+### 6. Oil Price Scenario Comparison
+Compare how the economy performs under different oil price assumptions ($50, $70, $90, $110 per barrel):
+```bash
+python tax_model.py --oil-price 50,70,90,110 --simulations 1000 --skip-fetch
 ```
 
 ---
