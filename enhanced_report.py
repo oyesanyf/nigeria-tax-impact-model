@@ -775,6 +775,8 @@ def generate_docx_report(filename, timestamp, summary, df, model_r2, oil_forecas
         ('Data Commons', 'Tax Revenue, Inflation', 'Fills historical gaps (2000-2015)'),
         ('World Bank', 'Digital Penetration, Remittances', 'Modern impact factors')
     ]
+    for s, d, r in sources:
+        row_cells = ds_table.add_row().cells
         row_cells[0].text = s
         row_cells[1].text = d
         row_cells[2].text = r
@@ -1142,15 +1144,9 @@ def generate_multi_oil_report(scenario_results, df, oil_prices, model, model_r2,
     # Try AI summary first
     executive_summary = generate_multi_oil_ai_summary(scenario_results, oil_prices, model_r2, n_simulations)
     
-    # Fallback to template if AI fails or returns None/Empty
-    if not executive_summary or "OpenAI" in executive_summary: # Basic check for valid content/error message
-         # Recalculate basic stats for fallback
-        min_risk_price = min(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
-        max_risk_price = max(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
-        
-        # Only overwrite if AI didn't work. If we have AI summary, skipping this block.
-        # But wait, generate_multi_oil_ai_summary handles fallback internally? No, I'll implement it to return fallback string if API fails.
-        pass # The function below will handle fallback logic
+    # Calculate key metrics for dashboard (Required for HTML)
+    min_risk_price = min(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
+    max_risk_price = max(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
 
     # Build HTML
     html = f"""
