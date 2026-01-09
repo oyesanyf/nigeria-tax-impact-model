@@ -1081,17 +1081,45 @@ def generate_multi_oil_fallback_summary(scenario_results, oil_prices, model_r2, 
     min_risk_price = min(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
     max_risk_price = max(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
     
+    # Generate detailed comparative analysis for Fallback
+    scenario_details = ""
+    for p in sorted(oil_prices):
+        sim = scenario_results[p]
+        risk_new = (sim['GDP_New'] < 0).mean() * 100
+        risk_old = (sim['GDP_Old'] < 0).mean() * 100
+        mean_new = sim['GDP_New'].mean()
+        p5 = np.percentile(sim['GDP_New'], 5)
+        p95 = np.percentile(sim['GDP_New'], 95)
+        
+        impact = "POSITIVE" if risk_new < risk_old else "NEUTRAL"
+        
+        scenario_details += f"""
+        <li>
+            <strong>Oil @ ${p:.0f}/bbl:</strong> 
+            The New Tax Act results in {mean_new:.2f}% avg growth 
+            (Range: {p5:.1f}% to {p95:.1f}%). 
+            Recession risk is <strong>{risk_new:.1f}%</strong> 
+            (vs {risk_old:.1f}% under Old Law). 
+            <em>Policy Impact: {impact} ({risk_new - risk_old:+.1f}pp risk reduction).</em>
+        </li>
+        """
+
     return f"""
-    <h3>Multi-Scenario Oil Price Analysis</h3>
+    <h3>Multi-Scenario Oil Price Analysis (Statistical Summary)</h3>
     
     <p><strong>Objective:</strong> This analysis compares the economic impact of Nigeria's Tax Act 2025 
     across {len(oil_prices)} different oil price scenarios, ranging from ${min(oil_prices):.0f} to ${max(oil_prices):.0f} per barrel.</p>
     
-    <p><strong>Key Finding:</strong> The optimal scenario occurs at <strong>${min_risk_price:.0f}/barrel</strong> 
-    (lowest recession risk under New Tax Act), while the highest risk is at <strong>${max_risk_price:.0f}/barrel</strong>.</p>
+    <p><strong>Key Finding:</strong> The optimal scenario occurs at <strong>${min_risk_price:.0f}/barrel</strong>, 
+    while the highest risk is at <strong>${max_risk_price:.0f}/barrel</strong>.</p>
     
-    <p><strong>Methodology:</strong> Each oil price scenario was simulated with {n_simulations:,} Monte Carlo iterations 
-    using the trained TPOT model (R² = {model_r2:.4f}). Recession risk is calculated as the probability of GDP growth falling below 0%.</p>
+    <h4>Detailed Scenario Breakdown:</h4>
+    <ul>
+        {scenario_details}
+    </ul>
+    
+    <p><strong>Methodology:</strong> Each scenario underwent {n_simulations:,} Monte Carlo simulations. 
+    The "Range" represents the 90% confidence interval (5th to 95th percentile) of economic outcomes.</p>
     """
 
 
@@ -1483,6 +1511,14 @@ def generate_multi_oil_docx(filename, timestamp, summary, oil_prices, scenario_r
         row[5].text = f"{risk_new - risk_old:+.1f}pp"
 
     doc.add_heading('Visualizations', level=1)
+    
+    chart_map = [
+        ('Oil Price Sensitivity Analysis', 'oil_sensitivity'),
+        ('Recession Risk Comparison', 'multi_risk_bars'),
+        ('GDP Growth Distribution', 'multi_distribution'),
+        ('GDP Growth Range', 'multi_boxplot'),
+        ('Policy Influence', 'sensitivity')
+    ]
     
     for title, key in chart_map:
         if key in charts:
