@@ -805,9 +805,20 @@ def generate_pdf_report(filename, timestamp, summary, df, model_r2, oil_forecast
     pdf.cell(0, 10, "Executive Summary", ln=True)
     pdf.set_font("helvetica", size=11)
     # Simple cleanup of HTML tags for PDF
-    clean_summary = summary.replace('<h3>', '').replace('</h3>', '\n').replace('<strong>', '').replace('</strong>', '').replace('<p>', '').replace('</p>', '\n')
+    clean_summary = summary.replace('<h3>', '').replace('</h3>', '\n') \
+                           .replace('<h4>', '\n').replace('</h4>', '\n') \
+                           .replace('<strong>', '').replace('</strong>', '') \
+                           .replace('<p>', '').replace('</p>', '\n') \
+                           .replace('<ul>', '\n').replace('</ul>', '\n') \
+                           .replace('<li>', '  - ').replace('</li>', '\n') \
+                           .replace('<em>', '').replace('</em>', '')
+
     # Replace common non-ASCII characters that break standard PDF fonts
     clean_summary = clean_summary.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
+    
+    # Force generic ASCII compatibility
+    clean_summary = clean_summary.encode('latin-1', 'replace').decode('latin-1')
+    
     pdf.multi_cell(0, 7, clean_summary)
     pdf.ln(5)
 
@@ -1565,8 +1576,22 @@ def generate_multi_oil_pdf(filename, timestamp, summary, oil_prices, scenario_re
     pdf.cell(0, 10, "Executive Summary", ln=True)
     pdf.set_font("helvetica", size=11)
     
-    clean_summary = summary.replace('<h3>', '').replace('</h3>', '\n').replace('<strong>', '').replace('</strong>', '').replace('<p>', '').replace('</p>', '\n')
-    clean_summary = clean_summary.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
+    # Simple cleanup of HTML tags for PDF
+    clean_summary = summary.replace('<h3>', '').replace('</h3>', '\n') \
+                           .replace('<h4>', '\n').replace('</h4>', '\n') \
+                           .replace('<strong>', '').replace('</strong>', '') \
+                           .replace('<p>', '').replace('</p>', '\n') \
+                           .replace('<ul>', '\n').replace('</ul>', '\n') \
+                           .replace('<li>', '  - ').replace('</li>', '\n') \
+                           .replace('<em>', '').replace('</em>', '')
+                           
+    # Replace common non-ASCII characters that break standard PDF fonts
+    clean_summary = clean_summary.replace('\u2013', '-').replace('\u2014', '-') \
+                                 .replace('\u2018', "'").replace('\u2019', "'") \
+                                 .replace('\u201c', '"').replace('\u201d', '"')
+    
+    # Force generic ASCII compatibility to prevent FPDF crashes
+    clean_summary = clean_summary.encode('latin-1', 'replace').decode('latin-1')
     
     pdf.multi_cell(0, 7, clean_summary)
     pdf.ln(5)
