@@ -40,6 +40,9 @@ def main():
     
     parser.add_argument('--oil-price', type=str, 
                         help="Custom oil prices (comma-separated) for scenario comparison.\nExample: --oil-price 60,70,80,90\nEach price becomes a separate scenario with its own simulation and charts.\nIf provided, AutoARIMA forecasting is skipped.")
+    
+    parser.add_argument('--auto-oil-scenarios', type=str, choices=['standard', 'extended', 'full'],
+                        help="Automatically generate statistically-sound oil price scenarios.\n'standard' = 3 scenarios (P25, P50, P75)\n'extended' = 5 scenarios (P10, P25, P50, P75, P90)\n'full' = 7 scenarios including extremes")
 
     args = parser.parse_args()
 
@@ -62,8 +65,12 @@ def main():
     if args.inflation_shock is not None:
         os.environ['OVERRIDE_INFLATION_SHOCK'] = str(args.inflation_shock)
         print(f"🔹 Override: Setting Inflation Shock Multiplier to {args.inflation_shock}x")
-        
-    if args.oil_price is not None:
+    
+    # Auto oil scenarios takes precedence over manual --oil-price
+    if args.auto_oil_scenarios is not None:
+        os.environ['AUTO_OIL_SCENARIOS'] = args.auto_oil_scenarios
+        print(f"🔹 Auto Oil Scenarios: Using statistical ensemble method ({args.auto_oil_scenarios})")
+    elif args.oil_price is not None:
         os.environ['OVERRIDE_OIL_PRICE'] = args.oil_price
         prices = [float(p.strip()) for p in args.oil_price.split(',')]
         print(f"🔹 Override: Using custom oil prices: {prices} (AutoARIMA skipped)")

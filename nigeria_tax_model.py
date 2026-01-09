@@ -89,6 +89,33 @@ def forecast_exogenous_vars(df):
         - oil_scenarios_list: list of individual prices if custom scenarios, None if AutoARIMA
     """
     
+    # Check for AUTO oil scenarios (Statistical Ensemble)
+    auto_scenario_mode = os.environ.get('AUTO_OIL_SCENARIOS')
+    
+    if auto_scenario_mode:
+        print(f"\n[Oil Forecast] Running STATISTICAL ENSEMBLE ({auto_scenario_mode})...")
+        try:
+            import oil_price_forecaster
+            
+            # Use the new forecaster module
+            prices, results = oil_price_forecaster.generate_auto_oil_scenarios(
+                df['Oil_Price'], 
+                FORECAST_HORIZON, 
+                scenario_type=auto_scenario_mode
+            )
+            
+            print(f"--> Generated {len(prices)} Scenarios: {prices}")
+            
+            # Return as both array (for compatibility) and list (for scenarios)
+            oil_forecast_2026 = np.array(prices)
+            return oil_forecast_2026, prices
+            
+        except ImportError:
+            print("   ❌ oil_price_forecaster module not found.")
+        except Exception as e:
+            print(f"   ❌ Error in auto-forecasting: {e}")
+            print("   Falling back to AutoARIMA...")
+
     # Check for custom oil price override
     custom_oil_prices = os.environ.get('OVERRIDE_OIL_PRICE')
     
