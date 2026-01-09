@@ -10,10 +10,32 @@ import os
 # ==========================================
 # CONFIGURATION
 # ==========================================
+# ==========================================
+# CONFIGURATION
+# ==========================================
 SEED = 42
 FORECAST_HORIZON = 4  # Forecast 4 Quarters (2026)
 # Allow override via environment variable (set by tax_model.py --simulations flag)
 N_SIMULATIONS = int(os.environ.get('N_SIMULATIONS', 1000))  # Monte Carlo Iterations
+
+def validate_api_keys():
+    """Validates external API keys to warn user early about offline mode."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        print("\n⚠️  OPENAI_API_KEY not found. Reports will be generated in OFFLINE mode (Statistical Summary only).")
+        return
+
+    print(f"\n🔑 Validating OpenAI API Key...", end=" ", flush=True)
+    try:
+        import openai
+        client = openai.OpenAI(api_key=api_key)
+        client.models.list(limit=1) # Lightweight check
+        print("✔ Success! AI Analysis enabled.")
+    except Exception as e:
+        print(f"\n❌ Validation Failed: {e}")
+        print("   -> Reports will fallback to OFFLINE mode.")
+    print("-" * 30)
+
 # ==========================================
 # SECTION 1: DATA INGESTION (PLACEHOLDERS)
 # ==========================================
@@ -389,8 +411,13 @@ def main():
     import os
     
     # Setup Reports Directory
+    # Setup Reports Directory
     reports_dir = 'reports'
     os.makedirs(reports_dir, exist_ok=True)
+    
+    # Pre-flight Check
+    validate_api_keys()
+
     print(f"Reports will be saved to: {os.path.abspath(reports_dir)}")
 
     # 1. Data

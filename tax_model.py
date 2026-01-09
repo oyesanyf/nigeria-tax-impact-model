@@ -16,6 +16,23 @@ def print_status(step, message):
     print(f"STEP {step}: {message}")
     print(f"{'='*60}")
 
+def validate_keys():
+    print(f"\n[{time.strftime('%H:%M:%S')}] 🔑 Checking OpenAI Configuration...", end=" ", flush=True)
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        print("\n   ⚠️  OPENAI_API_KEY is missing. Reports will include comprehensive STATISTICAL summaries only.")
+        return
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=api_key)
+        client.models.list(limit=1)
+        print("✔ Validated.")
+    except Exception as e:
+        print(f"\n   ❌ Key is set but INVALID: {e}")
+        print("   -> Reports will fallback to Statistical Mode.")
+    print("-" * 40)
+
 def main():
     import argparse
     
@@ -74,6 +91,11 @@ def main():
         os.environ['OVERRIDE_OIL_PRICE'] = args.oil_price
         prices = [float(p.strip()) for p in args.oil_price.split(',')]
         print(f"🔹 Override: Using custom oil prices: {prices} (AutoARIMA skipped)")
+
+    # -----------------------------------------------
+    # EARLY KEY CHECK
+    # -----------------------------------------------
+    validate_keys()
 
     print("Starting Nigeria Tax Model System (End-to-End)...")
     
