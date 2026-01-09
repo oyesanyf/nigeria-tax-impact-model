@@ -1263,9 +1263,184 @@ def generate_multi_oil_report(scenario_results, df, oil_prices, model, model_r2,
     
     paths = {"html": os.path.abspath(html_filename)}
     
+    # Generate Docx
+    docx_filename = f"{base_filename}.docx"
+    try:
+        generate_multi_oil_docx(docx_filename, timestamp, executive_summary, oil_prices, scenario_results, model_r2, n_simulations, charts)
+        paths["word"] = os.path.abspath(docx_filename)
+    except Exception as e:
+        print(f"❌ Error generating Word report: {e}")
+        
+    # Generate PDF
+    pdf_filename = f"{base_filename}.pdf"
+    try:
+        generate_multi_oil_pdf(pdf_filename, timestamp, executive_summary, oil_prices, scenario_results, model_r2, n_simulations, charts)
+        paths["pdf"] = os.path.abspath(pdf_filename)
+    except Exception as e:
+        print(f"❌ Error generating PDF report: {e}")
+    
     print(f"✔ Multi-scenario report saved: {html_filename}")
     
     return paths
+
+
+def generate_multi_oil_docx(filename, timestamp, summary, oil_prices, scenario_results, model_r2, n_simulations, charts):
+    """Generate Word Document for Multi-Scenario Oil Analysis."""
+    doc = Document()
+    doc.add_heading('Multi-Scenario Oil Price Analysis', 0)
+    doc.add_paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+    doc.add_paragraph(f"Report ID: {timestamp}")
+    doc.add_paragraph(f"Oil Prices Analyzed: {', '.join([f'${p:.0f}' for p in oil_prices])}")
+
+    doc.add_heading('Executive Summary', level=1)
+    clean_summary = summary.replace('<h3>', '').replace('</h3>', '').replace('<strong>', '').replace('</strong>', '').replace('<p>', '').replace('</p>', '\n')
+    doc.add_paragraph(clean_summary)
+
+    doc.add_heading('Key Metrics', level=1)
+    table = doc.add_table(rows=1, cols=2)
+    min_risk_price = min(oil_prices, key=lambda p: (scenario_results[p]['GDP_New'] < 0).mean())
+    
+    metrics = [
+        ('Oil Price Scenarios', str(len(oil_prices))),
+        ('Simulations per Scenario', f"{n_simulations:,}"),
+        ('Total Simulations', f"{n_simulations * len(oil_prices):,}"),
+        ('Model Accuracy (R²)', f"{model_r2:.1%}"),
+        ('Best Scenario (Lowest Risk)', f"${min_risk_price:.0f}/barrel")
+    ]
+    
+    for m, v in metrics:
+        row = table.add_row().cells
+        row[0].text = m
+        row[1].text = v
+
+    doc.add_heading('Scenario Comparison Table', level=1)
+    # create table with headers
+    comp_table = doc.add_table(rows=1, cols=6)
+    hdr = comp_table.rows[0].cells
+    hdr[0].text = 'Oil Price'
+    hdr[1].text = 'Mean GDP (New Law)'
+    hdr[2].text = 'Risk: Old Law'
+    hdr[3].text = 'Risk: New Law'
+    hdr[4].text = 'Risk: Shock'
+    hdr[5].text = 'Policy Impact'
+    
+    for oil_price in oil_prices:
+        sim = scenario_results[oil_price]
+        risk_old = (sim['GDP_Old'] < 0).mean() * 100
+        risk_new = (sim['GDP_New'] < 0).mean() * 100
+        risk_shock = (sim['GDP_Shock'] < 0).mean() * 100
+        mean_gdp = sim['GDP_New'].mean()
+        
+        row = comp_table.add_row().cells
+        row[0].text = f"${oil_price:.0f}/barrel"
+        row[1].text = f"{mean_gdp:.2f}%"
+        row[2].text = f"{risk_old:.1f}%"
+        row[3].text = f"{risk_new:.1f}%"
+        row[4].text = f"{risk_shock:.1f}%"
+        row[5].text = f"{risk_new - risk_old:+.1f}pp"
+
+    doc.add_heading('Visualizations', level=1)
+    
+    chart_map = [
+        ('Oil Price Sensitivity Analysis', 'oil_sensitivity'),
+        ('Recession Risk Comparison', 'multi_risk_bars'),
+        ('GDP Growth Distribution', 'multi_distribution'),
+        ('GDP Growth Range', 'multi_boxplot'),
+        ('Policy Influence', 'sensitivity')
+    ]
+    
+    for title, key in chart_map:
+        if key in charts:
+            doc.add_heading(title, level=2)
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
+                tmpfile.write(base64.b64decode(charts[key]))
+                tmpfile_path = tmpfile.name
+            doc.add_picture(tmpfile_path, width=Inches(6))
+            os.unlink(tmpfile_path)
+
+    doc.save(filename)
+
+
+def generate_multi_oil_pdf(filename, timestamp, summary, oil_prices, scenario_results, model_r2, n_simulations, charts):
+    """Generate PDF Document for Multi-Scenario Oil Analysis."""
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    
+    # Title
+    pdf.set_font("helvetica", 'B', 16)
+    pdf.cell(0, 10, "Multi-Scenario Oil Price Analysis", ln=True, align='C')
+    pdf.set_font("helvetica", size=10)
+    pdf.cell(0, 10, f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", ln=True, align='C')
+    pdf.cell(0, 10, f"Oil Prices: {', '.join([f'${p:.0f}' for p in oil_prices])}", ln=True, align='C')
+    pdf.ln(10)
+    
+    # Summary
+    pdf.set_font("helvetica", 'B', 14)
+    pdf.cell(0, 10, "Executive Summary", ln=True)
+    pdf.set_font("helvetica", size=11)
+    
+    clean_summary = summary.replace('<h3>', '').replace('</h3>', '\n').replace('<strong>', '').replace('</strong>', '').replace('<p>', '').replace('</p>', '\n')
+    clean_summary = clean_summary.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
+    
+    pdf.multi_cell(0, 7, clean_summary)
+    pdf.ln(5)
+    
+    # Comparison Table (Text based for simplicity in FPDF)
+    pdf.set_font("helvetica", 'B', 14)
+    pdf.cell(0, 10, "Scenario Comparison", ln=True)
+    pdf.set_font("courier", size=9) # Monospace for alignment
+    
+    # Header
+    pdf.cell(25, 8, "Price", 1)
+    pdf.cell(25, 8, "GDP(New)", 1)
+    pdf.cell(30, 8, "Risk(Old)", 1)
+    pdf.cell(30, 8, "Risk(New)", 1)
+    pdf.cell(30, 8, "Risk(Shock)", 1)
+    pdf.cell(30, 8, "Impact", 1, ln=True)
+    
+    for oil_price in oil_prices:
+        sim = scenario_results[oil_price]
+        risk_old = (sim['GDP_Old'] < 0).mean() * 100
+        risk_new = (sim['GDP_New'] < 0).mean() * 100
+        risk_shock = (sim['GDP_Shock'] < 0).mean() * 100
+        mean_gdp = sim['GDP_New'].mean()
+        
+        pdf.cell(25, 8, f"${oil_price:.0f}", 1)
+        pdf.cell(25, 8, f"{mean_gdp:.2f}%", 1)
+        pdf.cell(30, 8, f"{risk_old:.1f}%", 1)
+        pdf.cell(30, 8, f"{risk_new:.1f}%", 1)
+        pdf.cell(30, 8, f"{risk_shock:.1f}%", 1)
+        pdf.cell(30, 8, f"{risk_new - risk_old:+.1f}pp", 1, ln=True)
+        
+    pdf.ln(10)
+    
+    # Visualizations
+    pdf.set_font("helvetica", 'B', 14)
+    pdf.cell(0, 10, "Visualizations", ln=True)
+    
+    chart_map = [
+        ('Oil Price Sensitivity', 'oil_sensitivity'),
+        ('Recession Risk Comparison', 'multi_risk_bars'),
+        ('GDP Growth Distribution', 'multi_distribution'),
+        ('GDP Growth Range', 'multi_boxplot'),
+        ('Policy Influence', 'sensitivity')
+    ]
+    
+    for title, key in chart_map:
+        if key in charts:
+            if pdf.get_y() > 200: pdf.add_page()
+            pdf.set_font("helvetica", 'B', 12)
+            pdf.cell(0, 10, title, ln=True)
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
+                tmpfile.write(base64.b64decode(charts[key]))
+                tmpfile_path = tmpfile.name
+            pdf.image(tmpfile_path, x=10, w=180)
+            os.unlink(tmpfile_path)
+            pdf.ln(5)
+            
+    pdf.output(filename)
 
 
 if __name__ == "__main__":
