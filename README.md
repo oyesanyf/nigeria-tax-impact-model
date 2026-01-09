@@ -47,6 +47,21 @@ Run the full pipeline with a single command:
 python tax_model.py --simulations 1000
 ```
 
+## ⚙️ Configuration (Optional)
+
+To enable the **AI "Chief Economist" Analysis** in your reports, set your OpenAI API Key.
+
+**Windows (PowerShell):**
+```powershell
+$env:OPENAI_API_KEY = "sk-proj-..."
+```
+**Mac/Linux:**
+```bash
+export OPENAI_API_KEY="sk-proj-..."
+```
+
+*Note: If no key is provided, the system runs in **Offline Mode**, generating detailed statistical breakdowns instead of AI commentary.*
+
 ## 💻 Command-Line Interface (CLI) Reference
 
 The system is highly flexible. Use these flags to control the pipeline or run sensitivity analyses.
@@ -56,6 +71,7 @@ The system is highly flexible. Use these flags to control the pipeline or run se
 | Flag | Description | Example |
 | :--- | :--- | :--- |
 | `--simulations [N]` | Set the number of Monte Carlo runs. | `python tax_model.py --simulations 50000` |
+| `--auto-oil-scenarios [MODE]` | Automatically generate oil price scenarios using ARIMA+Monte Carlo. Modes: `standard`, `extended`, `full`. | `python tax_model.py --auto-oil-scenarios full` |
 | `--skip-fetch` | Use cached data; skip Google Data Commons/World Bank API calls. | `python tax_model.py --skip-fetch` |
 | `--reports-only` | Skip training and simulation; just regenerate the HTML/PDF/Word reports. | `python tax_model.py --reports-only` |
 
@@ -123,6 +139,12 @@ python tax_model.py --skip-fetch
 Compare how the economy performs under different oil price assumptions ($50, $70, $90, $110 per barrel):
 ```bash
 python tax_model.py --oil-price 50,70,90,110 --simulations 1000 --skip-fetch
+```
+
+### 7. Automatic Strategic Analysis (Recommended)
+Let the system statistically determine the best oil price scenarios (P10, P50, P90) based on historical volatility, and generate a full AI report:
+```bash
+python tax_model.py --auto-oil-scenarios full --simulations 2000
 ```
 
 ---
